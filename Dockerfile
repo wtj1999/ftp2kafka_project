@@ -32,4 +32,4 @@ RUN pip install -r requirements.txt
 VOLUME ["/data"]
 
 # 默认命令运行你的 runner（轮询 FTP 的主循环）
-CMD ["python", "-u", "app/poller.py"]
+CMD ["python", "-u", "poller.py"]
