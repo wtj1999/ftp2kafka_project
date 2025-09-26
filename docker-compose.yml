@@ -1,0 +1,29 @@
+# docker-compose.yml
+version: "3.8"
+
+services:
+  app:
+    build: .
+    image: ftp2kafka_app:latest
+    container_name: ftp2kafka_app
+    restart: unless-stopped
+    env_file:
+      - .env            # 从项目根读取 .env
+    environment:
+      # 可在这里覆盖 env_file 里的变量（可选）
+      # KAFKA_BOOTSTRAP_SERVERS: "kafka.remote.example.com:9093"
+    volumes:
+      - ./data:/data            # 本地 data 目录（LOCAL_WORKDIR / PROCESSED_DB 等）
+      - ./logs:/var/log/ftp2kafka
+      - ./certs:/etc/ssl/certs:ro   # 如果需要 TLS 证书（可选）
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    # 如果需要 healthcheck，你可以在镜像里实现一个小脚本并在此处调用：
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
