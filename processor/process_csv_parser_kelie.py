@@ -39,7 +39,7 @@ FIELD_MAP = {
     '循环次数': 'cycle_count',
     '循环统计': 'cycle_stats',
     'WorkingConditionStep': 'working_condition_step',
-    'BMS_BattVol': 'bms_pack_voltage',
+    'BatVoltage': 'bms_pack_voltage',
     '电池包码': 'pack_code',
 }
 
@@ -48,7 +48,7 @@ KEEP_COLS_CH = [
     '阶段充电能量', '阶段放电能量', '阶段充电容量', '阶段放电容量',
     '充电能量', '放电能量', '充电容量', '放电容量',
     '阶段时间', '累计时间', '循环体', '循环次数', '循环统计',
-    'WorkingConditionStep', 'BMS_BattVol'
+    'WorkingConditionStep', 'BatVoltage'
 ]
 
 def get_pack_codes_from_step_file(record_file: str) -> List[str]:
@@ -89,8 +89,8 @@ def process_csv_to_json(csv_path: str,
     if drop_cols:
         df = df.drop(columns=drop_cols)
 
-    temp_cols = [c for c in df.columns if c and c.startswith("BMS_BattTemp")]
-    volt_cols = [c for c in df.columns if c and c.startswith("BMS_CellVolt")]
+    temp_cols = [c for c in df.columns if c and c.startswith("CellTemp")]
+    volt_cols = [c for c in df.columns if c and c.startswith("CellVolt")]
 
     def idx_key(col):
         nums = re.findall(r'\d+', col)
@@ -147,7 +147,7 @@ def process_csv_to_json(csv_path: str,
 
             for j in range(102):
                 key = f"BMS_CellVolt{j+1}"
-                val = volt_chunk[j] if j < len(volt_chunk) else np.nan
+                val = volt_chunk[j] / 1000 if j < len(volt_chunk) else np.nan
                 pack_data[key] = None if pd.isna(val) else float(val)
 
             volt_list = [v for v in (volt_chunk.tolist()) if not pd.isna(v)]
@@ -166,18 +166,18 @@ def process_csv_to_json(csv_path: str,
                 max_idx = int(valid_idx[max_rel_idx]) + 1
                 min_idx = int(valid_idx[min_rel_idx]) + 1
 
-            pack_data["max_voltage"] = None if max_v is None else float(max_v)
+            pack_data["max_voltage"] = None if max_v is None else float(max_v) / 1000
             pack_data["max_voltage_cell_index"] = max_idx
-            pack_data["min_voltage"] = None if min_v is None else float(min_v)
+            pack_data["min_voltage"] = None if min_v is None else float(min_v) / 1000
             pack_data["min_voltage_cell_index"] = min_idx
 
             if (max_v is None) or (min_v is None):
                 pack_data["pack_voltage_range"] = None
             else:
-                pack_data["pack_voltage_range"] = round(float(max_v) - float(min_v), 4)
+                pack_data["pack_voltage_range"] = round(float(max_v) - float(min_v), 4) / 1000
 
             # pack_data["_source_row_idx"] = int(idx)
-            pack_data['test_device_name'] = '锐能'
+            pack_data['test_device_name'] = '科列'
 
             json_records.append(pack_data)
 
@@ -190,6 +190,7 @@ def process_csv_to_json(csv_path: str,
 
 
 if __name__ == "__main__":
-    record_file = r"D:\jz_pack_data\01\2025-09-17\备份\锐能@DT2459A-F9G-0000006@03HPB0DA0001BWF9G0000081@330阶梯充一拖四1P102S DCR@20250916183907@20250917001729@通道1@@记录层.csv"
-    # process_csv(record_file)
+    record_file = r"C:\Users\HP\PycharmProjects\ftp2kafka_project\data\incoming\data_ftp_upload_pack_电测_02_2025-09-28_锐能_DT2528A-F9V-0000207_03HPB0DA0001BWF9V0000025_330阶梯充一拖四-科列1P102S_DCR_20250927222956_20250928041456_通道2\锐能@DT2528A-F9V-0000207@03HPB0DA0001BWF9V0000025@330阶梯充一拖四-科列1P102S DCR@20250927222956@20250928041456@通道2@@记录层.csv"
+    out_file = record_file.replace(".csv", "_processed.jsonl")
+    process_csv_to_json(record_file, out_file)
 

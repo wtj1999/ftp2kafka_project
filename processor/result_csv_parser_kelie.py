@@ -82,14 +82,14 @@ FIELD_MAP = {
     "循环次数": "cycle_count",
     "循环统计": "cycle_stats",
     "WorkingConditionStep": "working_condition_step",
-    "BMS_BattVol": "bms_pack_voltage",
+    "BatVoltage": "bms_pack_voltage",
 }
 
 KEEP_FIELDS_CH = [
     '电池包码', '车辆码', '设备IP', '获取时间', '通道号', '工步号', '工步名称', '电压', '电流', '功率',
     '阶段充电能量', '阶段放电能量', '阶段充电容量', '阶段放电容量', '充电能量', '放电能量',
     '充电容量', '放电容量', '阶段时间', '累计时间', '循环体', '循环次数', '循环统计',
-    'WorkingConditionStep', 'BMS_BattVol'
+    'WorkingConditionStep', 'BatVoltage'
 ]
 KEEP_FIELDS = KEEP_FIELDS_CH
 
@@ -123,12 +123,12 @@ def result_csv_to_json(
     header = pd.read_csv(csv_path, nrows=0, encoding=encoding)
     all_cols = clean_cols(list(header.columns))
 
-    temp_cols = [c for c in all_cols if re.match(r'^BMS_BattTemp\d+$', c, re.I)]
+    temp_cols = [c for c in all_cols if re.match(r'^CellTemp\d+$', c, re.I)]
     if not temp_cols:
-        temp_cols = [c for c in all_cols if c.startswith("BMS_BattTemp")]
-    cell_cols = [c for c in all_cols if re.match(r'^BMS_CellVolt\d+$', c, re.I)]
+        temp_cols = [c for c in all_cols if c.startswith("CellTemp")]
+    cell_cols = [c for c in all_cols if re.match(r'^CellVolt\d+$', c, re.I)]
     if not cell_cols:
-        cell_cols = [c for c in all_cols if c.startswith("BMS_CellVolt")]
+        cell_cols = [c for c in all_cols if c.startswith("CellVolt")]
 
     def idx_key(col):
         nums = re.findall(r'\d+', col)
@@ -280,20 +280,20 @@ def result_csv_to_json(
 
                 for j, val in enumerate(cell_volt_chunk, start=1):
                     key = f"BMS_CellVolt{j}"
-                    out_obj[key] = None if val is None else float(val)
+                    out_obj[key] = None if val is None else float(val) / 1000
 
-                out_obj["max_voltage"] = None if max_val is None else float(max_val)
+                out_obj["max_voltage"] = None if max_val is None else float(max_val) / 1000
                 out_obj["max_voltage_cell_index"] = max_idx_1b
-                out_obj["min_voltage"] = None if min_val is None else float(min_val)
+                out_obj["min_voltage"] = None if min_val is None else float(min_val) / 1000
                 out_obj["min_voltage_cell_index"] = min_idx_1b
 
                 if (max_val is None) or (min_val is None):
                     out_obj["pack_voltage_range"] = None
                 else:
-                    out_obj["pack_voltage_range"] = round(float(max_val) - float(min_val), 4)
+                    out_obj["pack_voltage_range"] = round(float(max_val) - float(min_val), 4) / 1000
 
                 # out_obj["_source_row_idx"] = int(src_idx)
-                out_obj['test_device_name'] = '锐能'
+                out_obj['test_device_name'] = '科列'
                 src_idx += 1
 
                 fout.write(json.dumps(out_obj, ensure_ascii=False) + "\n")
@@ -304,7 +304,7 @@ def result_csv_to_json(
 
 
 if __name__ == "__main__":
-    csv_path = r"D:\jz_pack_data\01\2025-09-17\备份\锐能@DT2459A-F9G-0000006@03HPB0DA0001BWF9G0000081@330阶梯充一拖四1P102S DCR@20250916183907@20250917001729@通道1@@工步层.csv"
+    csv_path = r'C:\Users\HP\PycharmProjects\ftp2kafka_project\data\incoming\data_ftp_upload_pack_电测_02_2025-09-28_锐能_DT2528A-F9V-0000207_03HPB0DA0001BWF9V0000025_330阶梯充一拖四-科列1P102S_DCR_20250927222956_20250928041456_通道2\锐能@DT2528A-F9V-0000207@03HPB0DA0001BWF9V0000025@330阶梯充一拖四-科列1P102S DCR@20250927222956@20250928041456@通道2@@工步层.csv'
     out_jsonl = csv_path.replace(".csv", "_processed.jsonl")
     res = result_csv_to_json(csv_path, out_jsonl, n_packs=4, chunksize=2000)
     print("done:", res)

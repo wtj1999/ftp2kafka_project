@@ -31,6 +31,7 @@ FTP_PASS = os.getenv("FTP_PASS", "")
 FTP_ROOT = os.getenv("FTP_ROOT", "/")   # 从哪个目录开始递归查找
 LOCAL_WORKDIR = os.getenv("LOCAL_WORKDIR", "./tmp_fetch")  # 本地临时目录
 PROCESSED_DB = os.getenv("PROCESSED_DB", "./processed.json")  # 已处理记录文件
+BRANCH_MAX = int(os.getenv("BRANCH_MAX", "14"))
 
 
 # ========== 工具函数 ==========
@@ -157,11 +158,11 @@ class FTPFetcher:
             self.connect()
         ftp = self._conn
         today = datetime.date.today()  # 或者传入特定日期 datetime.date(2025, 9, 25)
-        all_files = list_files_for_date(ftp, base_root=self.root, day=today, branch_max=1)
+        all_files = list_files_for_date(ftp, base_root=self.root, day=today, branch_max=BRANCH_MAX)
 
         # logger.info("开始递归列出 FTP 下 %s 所有文件 ...", self.root)
         # all_files = ftp_list_recursive(ftp, self.root)
-        logger.info("共找到 %d 个远程路径（含文件/可能的目录）", len(all_files))
+        # logger.info("共找到 %d 个远程路径（含文件/可能的目录）", len(all_files))
 
         pairs = {}
         for remote in all_files:
