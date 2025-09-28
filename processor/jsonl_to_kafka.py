@@ -33,7 +33,7 @@ def send_jsonl_to_kafka_confluent(
     topic: str,
     producer: Optional[Producer] = None,
     sync: bool = True,
-    retries: int = 3,
+    retries: int = 5,
     flush_timeout: float = 30.0
 ) -> Dict[str, int]:
     """
@@ -93,11 +93,11 @@ def send_jsonl_to_kafka_confluent(
                     # 本地队列满（非常大吞吐时可能发生），等待并重试
                     last_exc = e
                     logger.warning("Local producer queue full, wait and retry (attempt %d): %s", attempt, e)
-                    time.sleep(min(0.5 * attempt, 5.0))
+                    time.sleep(min(attempt, 5.0))
                 except KafkaError as e:
                     last_exc = e
                     logger.warning("KafkaError on produce (attempt %d): %s", attempt, e)
-                    time.sleep(min(0.5 * attempt, 5.0))
+                    time.sleep(min(attempt, 5.0))
                 except Exception as e:
                     last_exc = e
                     logger.exception("Unexpected produce error (attempt %d): %s", attempt, e)
@@ -116,16 +116,11 @@ def send_jsonl_to_kafka_confluent(
         while True:
             # poll 等待交付回调触发
             producer.poll(0.1)
-            # 这里无法直接从 Producer 获取未决消息数，通常用 flush 来阻塞直到队列为空或超过 timeout
-            # 但我们想要让 delivery_cb 统计 sent/failed，所以用 flush:
             try:
                 producer.flush(timeout=0)
             except TypeError:
                 # 某些版本 .flush() 不接受 timeout, 忽略
                 pass
-
-            # 退出条件：当总处理数 (sent+failed) >= 文件行数（粗略），但我们没有行数计数器——使用 flush 最稳
-            # 直接调用 flush(blocking)：
             break
 
     # 最后进行一次 flush（等待 outstanding）

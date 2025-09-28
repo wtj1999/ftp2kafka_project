@@ -73,7 +73,7 @@ def get_pack_codes_from_step_file(record_file: str) -> List[str]:
         raise ValueError(f"电池包码数量不是4个: {pack_codes}")
     return pack_codes
 
-def process_csv_to_json(csv_path: str,
+def process_csv_to_json_kelie(csv_path: str,
                         out_jsonl_path: str):
     pack_codes = get_pack_codes_from_step_file(csv_path)
     print("电池包码:", pack_codes)

@@ -1,6 +1,8 @@
 from fetcher.fetcher import FTPFetcher
 from processor.process_csv_parser import process_csv_to_json
 from processor.result_csv_parser import result_csv_to_json
+from processor.process_csv_parser_kelie import process_csv_to_json_kelie
+from processor.result_csv_parser_kelie import result_csv_to_json_kelie
 import logging
 import os
 from dotenv import load_dotenv
@@ -31,20 +33,20 @@ def process_and_send_pairs(
     delete_jsonl_after_send: bool = True
 ) -> Dict[str, Any]:
     """
-    fetcher: 你的 FTPFetcher 实例（需实现 connect(), fetch_new_pairs()）
-    processed_db: ProcessedDB 的实例（已经实现 is_processed / mark_processed）
+    fetcher: FTPFetcher 实例（实现 connect(), fetch_new_pairs()）
+    processed_db: ProcessedDB 的实例（实现 is_processed / mark_processed）
     kafka_conf: confluent_kafka Producer 配置
     topic_record / topic_step: kafka topic
     """
     results = {"pairs_total": 0, "pairs_skipped": 0, "pairs_processed": 0, "kafka_sent": 0, "kafka_failed": 0}
 
-    # 创建 producer（复用）
-    producer = Producer(kafka_conf)
-
     fetcher.connect()
     pairs = fetcher.fetch_new_pairs()
     results["pairs_total"] = len(pairs)
     logger.info("发现 %d 对文件需要处理", len(pairs))
+
+    # 创建 producer（复用）
+    producer = Producer(kafka_conf)
 
     for p in pairs:
         # 你的 fetcher 返回结构中最好包含 remote_prefix/remote_record/remote_step/size/mtime/meta_str 等字段
@@ -87,13 +89,17 @@ def process_and_send_pairs(
 
         logger.info("开始处理 pair_key=%s local_record=%s local_step=%s", pair_key, local_record, local_step)
         try:
+            is_kelie = "科列" in local_record
             # 1) 生成 record jsonl
             rec_jsonl = local_record.replace(".csv", "_processed.jsonl")
             if os.path.exists(rec_jsonl):
                 logger.info("record jsonl: %s 已存在, 跳过生成", rec_jsonl)
             else:
                 logger.info("开始生成 record jsonl: %s", rec_jsonl)
-                process_csv_to_json(csv_path=local_record, out_jsonl_path=rec_jsonl)
+                if is_kelie:
+                    process_csv_to_json_kelie(csv_path=local_record, out_jsonl_path=rec_jsonl)
+                else:
+                    process_csv_to_json(csv_path=local_record, out_jsonl_path=rec_jsonl)
 
             # 2) 生成 step jsonl
             step_jsonl = local_step.replace(".csv", "_processed.jsonl")
@@ -101,7 +107,10 @@ def process_and_send_pairs(
                 logger.info("step jsonl: %s 已存在, 跳过生成", step_jsonl)
             else:
                 logger.info("开始生成 step jsonl: %s", step_jsonl)
-                result_csv_to_json(csv_path=local_step, out_jsonl_path=step_jsonl)
+                if is_kelie:
+                    result_csv_to_json_kelie(csv_path=local_step, out_jsonl_path=step_jsonl)
+                else:
+                    result_csv_to_json(csv_path=local_step, out_jsonl_path=step_jsonl)
 
             if dry_run:
                 logger.info("[dry_run] 已生成 jsonl，但不发送：%s , %s", rec_jsonl, step_jsonl)
