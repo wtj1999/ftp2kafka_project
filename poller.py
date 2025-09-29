@@ -62,7 +62,8 @@ def make_kafka_conf() -> Dict[str, Any]:
     # 你可以根据需要把更多配置放到环境变量中
     return {
         "bootstrap.servers": KAFKA_BOOTSTRAP,
-        # 可选：安全认证配置（SASL/SSL）等放在 env
+        "acks": 1,
+        # "enable.idempotence": True
     }
 
 def main_loop():
@@ -70,8 +71,6 @@ def main_loop():
     kafka_conf = make_kafka_conf()
 
     backoff = INITIAL_BACKOFF
-
-    # 持久运行
 
     while not _stop_event.is_set():
         try:
