@@ -119,7 +119,6 @@ def send_jsonl_to_kafka_confluent(
             try:
                 producer.flush(timeout=0)
             except TypeError:
-                # 某些版本 .flush() 不接受 timeout, 忽略
                 pass
             break
 

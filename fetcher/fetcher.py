@@ -145,7 +145,7 @@ class FTPFetcher:
 
     def find_pairs(self) -> Dict[str, Dict]:
         """
-        在 FTP 上递归查找所有文件，识别成对的记录层/工步层：
+        在 FTP 上查找所有文件，识别成对的记录层/工步层：
         - 以后缀 '@@工步层.csv' / '@@记录层.csv' 匹配
         - 以文件名前缀（去掉后缀部分）作为 pair_key
         返回 mapping:
@@ -159,10 +159,6 @@ class FTPFetcher:
         ftp = self._conn
         today = datetime.date.today()  # 或者传入特定日期 datetime.date(2025, 9, 25)
         all_files = list_files_for_date(ftp, base_root=self.root, day=today, branch_max=BRANCH_MAX)
-
-        # logger.info("开始递归列出 FTP 下 %s 所有文件 ...", self.root)
-        # all_files = ftp_list_recursive(ftp, self.root)
-        # logger.info("共找到 %d 个远程路径（含文件/可能的目录）", len(all_files))
 
         pairs = {}
         for remote in all_files:
@@ -179,7 +175,6 @@ class FTPFetcher:
         valid_pairs = {}
         for prefix, info in pairs.items():
             if "step" in info and "record" in info:
-                # fetch meta for both files
                 step_info = {}#get_remote_file_info(ftp, info["step"])
                 record_info = {}#get_remote_file_info(ftp, info["record"])
                 # build meta string to detect changes: combine paths + mdtm + size

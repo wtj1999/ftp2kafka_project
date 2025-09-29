@@ -29,8 +29,8 @@ def process_and_send_pairs(
     topic_record: str,
     topic_step: Optional[str],
     delete_csv_after_send: bool = True,
-    dry_run: bool = False,
-    delete_jsonl_after_send: bool = True
+    dry_run: bool = True,
+    delete_jsonl_after_send: bool = False
 ) -> Dict[str, Any]:
     """
     fetcher: FTPFetcher 实例（实现 connect(), fetch_new_pairs()）
@@ -49,11 +49,10 @@ def process_and_send_pairs(
     producer = Producer(kafka_conf)
 
     for p in pairs:
-        # 你的 fetcher 返回结构中最好包含 remote_prefix/remote_record/remote_step/size/mtime/meta_str 等字段
         local_record = p.get("local_record")
         local_step = p.get("local_step")
         pair_key = p.get("pair_key")
-        meta_str = p.get("meta_str")  # 如果 fetcher 已计算好 meta_str 可以直接用
+        meta_str = p.get("meta_str")
 
 
         if pair_key is None:
@@ -63,7 +62,6 @@ def process_and_send_pairs(
 
         remote_meta = {"meta_str": meta_str}
 
-        # 使用 ProcessedDB 判断是否已经处理
         try:
             already = fetcher.processed_db.is_processed(pair_key, remote_meta)
         except Exception:
