@@ -6,6 +6,7 @@ import logging
 import threading
 from typing import Iterable, Optional, Dict, Any
 from confluent_kafka import Producer, KafkaError
+from confluent_kafka.admin import AdminClient, NewTopic, KafkaException
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -27,6 +28,62 @@ def make_confluent_producer(conf: Dict[str, Any]) -> Producer:
     }
     """
     return Producer(conf)
+
+def make_admin_client(conf: dict) -> AdminClient:
+    # AdminClient 使用与 Producer 相同的 bootstrap/认证配置
+    return AdminClient(conf)
+
+def ensure_topic_exists(admin_conf: dict, topic: str,
+                        num_partitions: int = 1,
+                        replication_factor: Optional[int] = None,
+                        topic_config: Optional[dict] = None,
+                        create_timeout: float = 10.0) -> bool:
+    """
+    确保 topic 存在；不存在则创建。返回 True 表示 topic 最终存在（已创建或已存在），False 表示失败。
+    admin_conf: 与 Producer 类似的配置 dict（至少包含 bootstrap.servers 和可能的认证）
+    replication_factor: 若为 None，函数会尝试根据 broker 数量选择合理的值（min(3, broker_count)）
+    topic_config: dict，额外的 topic-level configs（例如 {"retention.ms": "604800000"}）
+    """
+    admin = make_admin_client(admin_conf)
+    try:
+        md = admin.list_topics(timeout=10)
+        # 若已经存在直接返回 True
+        if topic in md.topics and md.topics[topic].error is None:
+            logger.info("Topic %s already exists.", topic)
+            return True
+        # 计算合适的 replication_factor（如果未指定）
+        broker_count = len(md.brokers)
+        if broker_count <= 0:
+            logger.warning("Can't determine broker count, default replication_factor to 1")
+            broker_count = 1
+        if replication_factor is None:
+            replication_factor = min(3, broker_count) if broker_count >= 1 else 1
+
+        new_topic = NewTopic(topic, num_partitions=num_partitions,
+                             replication_factor=replication_factor,
+                             config=topic_config or {})
+        fs = admin.create_topics([new_topic], request_timeout=create_timeout)
+        # fs 是 dict topic->future
+        fut = fs.get(topic)
+        try:
+            fut.result(create_timeout)  # 若失败会抛异常
+            logger.info("Topic %s created (partitions=%d, rf=%d).", topic, num_partitions, replication_factor)
+            return True
+        except KafkaException as e:
+            # 处理已存在或其他错误
+            err = e.args[0]
+            # TOPIC_ALREADY_EXISTS 的情况下也算成功
+            if hasattr(err, 'code') and err.code().name == 'TOPIC_ALREADY_EXISTS':
+                logger.info("Topic %s already exists (race).", topic)
+                return True
+            logger.error("Failed to create topic %s: %s", topic, e)
+            return False
+        except Exception as e:
+            logger.exception("Unexpected error creating topic %s: %s", topic, e)
+            return False
+    except Exception as e:
+        logger.exception("Failed to fetch metadata/create topic %s: %s", topic, e)
+        return False
 
 '''
 def send_jsonl_to_kafka_confluent(
@@ -141,6 +198,8 @@ def send_jsonl_to_kafka_confluent(
     jsonl_path: str,
     topic: str,
     producer: Optional[Producer] = None,
+    admin_conf: Optional[dict] = None,
+    ensure_topic: bool = True,
     sync: bool = True,
     produce_retries: int = 5,          # produce() 层面的重试（本地队列/临时错误）
     delivery_retry_rounds: int = 3,    # 在 delivery_cb 报失败后对失败消息的重试轮数
@@ -155,6 +214,15 @@ def send_jsonl_to_kafka_confluent(
     if producer is None:
         producer = make_confluent_producer({"bootstrap.servers": KAFKA_BOOTSTRAP})
         close_prod = True
+
+    if ensure_topic:
+        admin_conf = admin_conf or {"bootstrap.servers": KAFKA_BOOTSTRAP}
+        ok = ensure_topic_exists(admin_conf, topic, num_partitions=1, replication_factor=None, topic_config=None)
+        if not ok:
+            logger.error("Topic %s does not exist and could not be created. Aborting send.", topic)
+            if close_prod:
+                producer.poll(0)
+            return {"sent": 0, "failed": 0}
 
     sent = 0
     failed = 0
