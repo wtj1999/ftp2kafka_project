@@ -18,7 +18,7 @@ services:
       options:
         max-size: "50m"
         max-file: "5"
-    # 如果需要 healthcheck，你可以在镜像里实现一个小脚本并在此处调用：
+    # 如果需要 healthcheck
     healthcheck:
       test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
       interval: 30s
