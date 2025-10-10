@@ -11,7 +11,6 @@ def _safe_sendcmd(ftp: ftplib.FTP, cmd: str) -> Optional[str]:
     try:
         return ftp.sendcmd(cmd)
     except ftplib.error_perm as e:
-        # 常见 500/502/550 等权限或不支持情形
         logger.debug("_safe_sendcmd perm error for %s: %s", cmd, e)
         return None
     except Exception as e:
@@ -24,8 +23,6 @@ def _parse_list_for_name(lines: list, basename: str):
     返回 size:int or None, mdtm_str: str or None (格式不保证).
     """
     for line in lines:
-        # 常见 unix style: "-rw-r--r-- 1 owner group  1234 Jan 01 00:00 filename"
-        # windows style: "01-01-20  12:00PM       1234 filename"
         if basename in line:
             parts = re.split(r'\s+', line.strip(), maxsplit=8)
             # unix-like 尝试
@@ -35,7 +32,6 @@ def _parse_list_for_name(lines: list, basename: str):
                     return size, None
                 except Exception:
                     pass
-            # windows-like: size 在倒数第二段
             tokens = line.split()
             for t in reversed(tokens[:-1]):
                 if re.match(r'^\d+$', t):

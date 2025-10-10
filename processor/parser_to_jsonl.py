@@ -26,6 +26,7 @@ logging.basicConfig(level=logging.INFO)
 def process_and_send_pairs(
     fetcher,
     kafka_conf: Dict[str, Any],
+    kafka_conf1: Dict[str, Any],
     topic_record: str,
     topic_step: Optional[str],
     delete_csv_after_send: bool = True,
@@ -45,8 +46,8 @@ def process_and_send_pairs(
     results["pairs_total"] = len(pairs)
     logger.info("发现 %d 对文件需要处理", len(pairs))
 
-    # 创建 producer（复用）
     producer = Producer(kafka_conf)
+    producer1 = Producer(kafka_conf1)
 
     for p in pairs:
         local_record = p.get("local_record")
@@ -135,7 +136,7 @@ def process_and_send_pairs(
             step_res = {"sent": 0, "failed": 0}
             if step_exists:
                 try:
-                    step_res = send_jsonl_to_kafka_confluent(step_jsonl, topic_step, producer)
+                    step_res = send_jsonl_to_kafka_confluent(step_jsonl, topic_step, producer1)
                     results["kafka_sent"] += step_res.get("sent", 0)
                     results["kafka_failed"] += step_res.get("failed", 0)
                 except Exception as e:

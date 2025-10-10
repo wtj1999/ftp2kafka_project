@@ -7,7 +7,7 @@ import traceback
 from threading import Event
 from typing import Dict, Any, Optional
 
-# 你现有模块
+
 from fetcher.fetcher import FTPFetcher
 from processor.parser_to_jsonl import process_and_send_pairs
 from confluent_kafka import Producer
@@ -18,7 +18,7 @@ POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "60"))        # 秒，轮询间�
 MAX_BACKOFF = int(os.getenv("MAX_BACKOFF", "300"))           # 最大退避（秒）
 INITIAL_BACKOFF = int(os.getenv("INITIAL_BACKOFF", "5"))     # 初始退避（秒）
 
-# FTP / 本地 / Kafka 配置从环境读取（你已有）
+# FTP / 本地 / Kafka 配置从环境读取
 FTP_HOST = os.getenv("FTP_HOST")
 FTP_PORT = int(os.getenv("FTP_PORT", "21"))
 FTP_USER = os.getenv("FTP_USER")
@@ -28,6 +28,7 @@ LOCAL_WORKDIR = os.getenv("LOCAL_WORKDIR", "./tmp_fetch")
 PROCESSED_DB = os.getenv("PROCESSED_DB", "./processed.json")
 
 KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP_SERVERS")
+KAFKA_BOOTSTRAP1 = os.getenv("KAFKA_BOOTSTRAP_SERVERS_1")
 TOPIC_RECORD = os.getenv("TOPIC_RECORD", "topic_record")
 TOPIC_STEP = os.getenv("TOPIC_STEP", "topic_step")
 
@@ -46,7 +47,7 @@ signal.signal(signal.SIGINT, _signal_handler)
 signal.signal(signal.SIGTERM, _signal_handler)
 
 def make_fetcher():
-    """构造并返回一个 FTPFetcher 实例（按你的实现要求）"""
+    """构造并返回一个 FTPFetcher 实例"""
     fetcher = FTPFetcher(
         host=FTP_HOST,
         port=FTP_PORT,
@@ -59,9 +60,14 @@ def make_fetcher():
     return fetcher
 
 def make_kafka_conf() -> Dict[str, Any]:
-    # 你可以根据需要把更多配置放到环境变量中
     return {
         "bootstrap.servers": KAFKA_BOOTSTRAP,
+        "acks": 1,
+        # "enable.idempotence": True
+    }
+def make_kafka_conf1() -> Dict[str, Any]:
+    return {
+        "bootstrap.servers": KAFKA_BOOTSTRAP1,
         "acks": 1,
         # "enable.idempotence": True
     }
@@ -69,6 +75,7 @@ def make_kafka_conf() -> Dict[str, Any]:
 def main_loop():
     fetcher = make_fetcher()
     kafka_conf = make_kafka_conf()
+    kafka_conf1 = make_kafka_conf1()
 
     backoff = INITIAL_BACKOFF
 
@@ -78,6 +85,7 @@ def main_loop():
             results = process_and_send_pairs(
                 fetcher=fetcher,
                 kafka_conf=kafka_conf,
+                kafka_conf1=kafka_conf1,
                 topic_record=TOPIC_RECORD,
                 topic_step=TOPIC_STEP,
                 delete_csv_after_send=True,
@@ -110,8 +118,6 @@ def main_loop():
             time.sleep(1)
             slept += 1
 
-
-    # 循环退出：尝试优雅清理（例如 flush producer）已在 process_and_send_pairs 内部 flush
     logger.info("轮询被请求停止，退出 main_loop。")
 
 if __name__ == "__main__":

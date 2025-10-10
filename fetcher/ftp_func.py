@@ -67,9 +67,6 @@ def ftp_list_recursive(ftp: ftplib.FTP, root: str = ".", debug: bool = False) ->
     except Exception as e:
         _log("mlsd top-level error:", e)
 
-    # --- 2) LIST 方法 (解析 Unix 风格 LIST) ---
-    # LIST 的输出行通常类似 "-rw-r--r-- 1 owner group  1234 Jan 01 00:00 filename"
-    # 以首字符 d 表示目录。
     def walk_list(path):
         try:
             # 保存 cwd
