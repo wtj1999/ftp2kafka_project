@@ -110,6 +110,40 @@ def get_first_nonnull(csv_path: str, colname: str, chunksize: int = 2000, encodi
         return None
     return None
 
+def compute_cell_dcr(csv_path) -> list:
+    df = pd.read_csv(csv_path, dtype=str, low_memory=False)
+    if '工步号' not in df.columns:
+        raise ValueError("DataFrame 中缺少列 '工步号'")
+
+    if df['工步号'].values.astype(int).max() !=15:
+        raise ValueError("科列结果数据中工步号最大值不是15")
+
+    df11 = df[df['工步号'] == '11']
+    df12 = df[df['工步号'] == '12']
+    if df12.empty:
+        raise ValueError("未找到工步号 == '12' 的行")
+    if df11.empty:
+        raise ValueError("未找到工步号 == '11' 的行")
+
+    row12 = df12.iloc[-1]
+    row11 = df11.iloc[-1]
+
+    cols = [c for c in df.columns if re.match(r'^CellVolt\d+$', c, re.I)]  # 1..408 inclusive
+
+    try:
+        vals12 = pd.to_numeric(row12[cols], errors='raise').to_numpy(dtype=float)
+        vals11 = pd.to_numeric(row11[cols], errors='raise').to_numpy(dtype=float)
+    except Exception as e:
+        raise ValueError(f"CellVolt 列中包含非数值或无法转换为 float: {e}")
+
+    if vals12.shape != (408,) or vals11.shape != (408,):
+        raise ValueError("提取的 CellVolt 列数目不等于 408")
+
+        # 逐元素相减再除以 297
+    result_array = (vals11 - vals12) / 297.0
+    result_list = [round(float(x), 4) for x in result_array.tolist()]
+    return result_list
+
 def result_csv_to_json_kelie(
     csv_path: str,
     out_jsonl_path: str,
@@ -119,6 +153,14 @@ def result_csv_to_json_kelie(
 ):
     if encoding is None:
         encoding = detect_encoding(csv_path)
+
+    dcr_list = None
+    try:
+        dcr_list = compute_cell_dcr(csv_path)
+    except ValueError as e:
+        print("电芯DCR计算失败：", e)
+    except Exception as e:
+        print("发生未知错误：", e)
 
     header = pd.read_csv(csv_path, nrows=0, encoding=encoding)
     all_cols = clean_cols(list(header.columns))
@@ -282,6 +324,17 @@ def result_csv_to_json_kelie(
                     key = f"BMS_CellVolt{j}"
                     out_obj[key] = None if val is None else float(val) / 1000
 
+                if dcr_list is not None:
+                    cell_dcr_chunk = dcr_list[i * 102:(i + 1) * 102]
+                    for j, val in enumerate(cell_dcr_chunk, start=1):
+                        key = f"cell_dcr{j}"
+                        out_obj[key] = None if val is None else float(val)
+                else:
+                    for j in range(1, 103):
+                        key = f"cell_dcr{j}"
+                        out_obj[key] = None
+
+
                 out_obj["max_voltage"] = None if max_val is None else float(max_val) / 1000
                 out_obj["max_voltage_cell_index"] = max_idx_1b
                 out_obj["min_voltage"] = None if min_val is None else float(min_val) / 1000
@@ -294,6 +347,8 @@ def result_csv_to_json_kelie(
 
                 # out_obj["_source_row_idx"] = int(src_idx)
                 out_obj['test_device_name'] = '科列'
+                out_obj['acquire_time'] = str(pd.to_datetime(out_obj['acquire_time'].replace('/', ' '),
+                                                         format='%Y-%m-%d %H:%M:%S.%f'))
                 src_idx += 1
 
                 fout.write(json.dumps(out_obj, ensure_ascii=False) + "\n")
@@ -304,7 +359,7 @@ def result_csv_to_json_kelie(
 
 
 if __name__ == "__main__":
-    csv_path = r'C:\Users\HP\PycharmProjects\ftp2kafka_project\data\incoming\data_ftp_upload_pack_电测_02_2025-09-28_锐能_DT2528A-F9V-0000207_03HPB0DA0001BWF9V0000025_330阶梯充一拖四-科列1P102S_DCR_20250927222956_20250928041456_通道2\锐能@DT2528A-F9V-0000207@03HPB0DA0001BWF9V0000025@330阶梯充一拖四-科列1P102S DCR@20250927222956@20250928041456@通道2@@工步层.csv'
+    csv_path = r'D:\jz_pack_data\09\锐能@DT2528A-F9X-0000309@03HPB0DA0001BWF9X0000033@330阶梯充一拖四-科列102SDCR@20250930014547@20250930061348@通道1@@工步层.csv'
     out_jsonl = csv_path.replace(".csv", "_processed.jsonl")
-    res = result_csv_to_json(csv_path, out_jsonl, n_packs=4, chunksize=2000)
+    res = result_csv_to_json_kelie(csv_path, out_jsonl, n_packs=4, chunksize=2000)
     print("done:", res)

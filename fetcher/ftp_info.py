@@ -54,7 +54,6 @@ def get_remote_file_info(ftp: ftplib.FTP, path: str, debug: bool = False) -> Dic
     if not path:
         return result
 
-    # 规范化 path：去掉两端空白
     path = path.strip()
 
     # 1) 如果支持 MLSD：通过目录 + basename 查找 facts
@@ -135,8 +134,6 @@ def get_remote_file_info(ftp: ftplib.FTP, path: str, debug: bool = False) -> Dic
         try:
             ftp.retrlines("LIST " + dirname, _collect)
         except ftplib.error_perm as e:
-            # LIST <dirname> 可能失败（权限或 dirname 为文件）
-            # 如果 dirname 看起来像文件（即 path 本身可能在根下），尝试 LIST path
             lines = []
             try:
                 ftp.retrlines("LIST " + path, _collect)

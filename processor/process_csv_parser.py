@@ -178,6 +178,7 @@ def process_csv_to_json(csv_path: str,
 
             # pack_data["_source_row_idx"] = int(idx)
             pack_data['test_device_name'] = '锐能'
+            pack_data['acquire_time'] = str(pd.to_datetime(pack_data['acquire_time'].replace('/', ' '), format='%Y-%m-%d %H:%M:%S.%f'))
 
             json_records.append(pack_data)
 
@@ -191,5 +192,5 @@ def process_csv_to_json(csv_path: str,
 
 if __name__ == "__main__":
     record_file = r"D:\jz_pack_data\01\2025-09-17\备份\锐能@DT2459A-F9G-0000006@03HPB0DA0001BWF9G0000081@330阶梯充一拖四1P102S DCR@20250916183907@20250917001729@通道1@@记录层.csv"
-    # process_csv(record_file)
+    process_csv_to_json(record_file, None)
 

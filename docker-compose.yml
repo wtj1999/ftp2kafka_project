@@ -18,6 +18,10 @@ services:
       options:
         max-size: "50m"
         max-file: "5"
+    extra_hosts:
+      - "jzpack01:10.0.50.20"
+      - "jzpack02:10.0.50.21"
+      - "jzpack03:10.0.50.22"
     # 如果需要 healthcheck
     healthcheck:
       test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]

@@ -178,6 +178,8 @@ def process_csv_to_json_kelie(csv_path: str,
 
             # pack_data["_source_row_idx"] = int(idx)
             pack_data['test_device_name'] = '科列'
+            pack_data['acquire_time'] = str(pd.to_datetime(pack_data['acquire_time'].replace('/', ' '),
+                                                       format='%Y-%m-%d %H:%M:%S.%f'))
 
             json_records.append(pack_data)
 

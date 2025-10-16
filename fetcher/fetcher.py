@@ -68,16 +68,9 @@ class ProcessedDB:
                 self._data = {}
 
     def is_processed(self, pair_key: str, remote_meta: Dict) -> bool:
-        """
-        判断给定 pair_key 是否被处理过（通过比较记录的 meta 是否一致）
-        这里 pair_key 是我们对一对文件生成的唯一 key（例如 remote_prefix）
-        remote_meta 可包含 mdtm/size 拼接字符串
-        我们只要 detect 如果已经以相同 meta 标记为 processed 则返回 True
-        """
         rec = self._data.get(pair_key)
         if not rec:
             return False
-        # compare stored meta (we store as string)
         stored = rec.get("meta")
         return stored == remote_meta.get("meta_str")
 
@@ -157,8 +150,11 @@ class FTPFetcher:
         if not self._conn:
             self.connect()
         ftp = self._conn
-        today = datetime.date.today()  # 或者传入特定日期 datetime.date(2025, 9, 25)
-        all_files = list_files_for_date(ftp, base_root=self.root, day=today, branch_max=BRANCH_MAX)
+        # today = datetime.date.today()  # 或者传入特定日期 datetime.date(2025, 9, 25)
+        utc_now = datetime.datetime.utcnow()
+        beijing_now = utc_now + datetime.timedelta(hours=8)
+        today_cn = beijing_now.date()
+        all_files = list_files_for_date(ftp, base_root=self.root, day=today_cn, branch_max=BRANCH_MAX)
 
         pairs = {}
         for remote in all_files:
@@ -171,7 +167,6 @@ class FTPFetcher:
                 prefix = remote[:-len("@@记录层.csv")]
                 rec = pairs.setdefault(prefix, {})
                 rec["record"] = remote
-        # filter only those which have both
         valid_pairs = {}
         for prefix, info in pairs.items():
             if "step" in info and "record" in info:
@@ -285,13 +280,12 @@ class FTPFetcher:
 
     def cleanup_local(self, local_paths: List[str], remove_empty_parent: bool = True):
         """
-        删除本地临时文件（通常在成功上传 Kafka 后调用）
+        删除本地临时文件（在成功上传 Kafka 后调用）
         """
         for p in local_paths:
             try:
                 if os.path.isdir(p):
                     logger.info("删除本地目录: %s", p)
-                    # remove files under dir
                     for root, dirs, files in os.walk(p, topdown=False):
                         for fname in files:
                             try:
@@ -314,7 +308,6 @@ class FTPFetcher:
                 logger.exception("删除本地失败: %s", p)
 
         if remove_empty_parent:
-            # try cleanup parent workdir empty dirs
             try:
                 for d in os.listdir(self.local_workdir):
                     dd = os.path.join(self.local_workdir, d)
@@ -328,13 +321,11 @@ class FTPFetcher:
 
     @staticmethod
     def _safe_filename(s: str) -> str:
-        # convert remote prefix to safe local dir name
         if not s:
             return "_"
         safe = "".join([c if c.isalnum() or c in "-_." else "_" for c in s])
         return safe
 
-    # context manager support
     def __enter__(self):
         self.connect()
         return self
@@ -345,7 +336,6 @@ class FTPFetcher:
 
 # ========== 示例用法 ==========
 if __name__ == "__main__":
-    # 直接跑测试（注意填环境变量或修改下面参数）
     fetcher = FTPFetcher(
         host=FTP_HOST,
         port=FTP_PORT,
@@ -358,13 +348,7 @@ if __name__ == "__main__":
     try:
         fetcher.connect()
         pairs = fetcher.fetch_new_pairs()
-        # pairs 里是下载好的本地文件信息，后续你把每个 pair 交给你的解析+kafka 上传流程
         for p in pairs:
             logger.info("本地文件 pair: %s", p)
-            # EXAMPLE:
-            # parse_and_upload_to_kafka(p['local_step'], p['local_record'])
-            # 如果上传成功：
-            # fetcher.mark_processed(p['pair_key'], p['meta_str'])
-            # fetcher.cleanup_local([os.path.dirname(p['local_step'])])
     finally:
         fetcher.close()
