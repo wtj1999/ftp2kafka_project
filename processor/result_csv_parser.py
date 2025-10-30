@@ -1,9 +1,8 @@
-import re
-import os
 import json
 from typing import List, Optional
 import pandas as pd
 import numpy as np
+from processor.parser_csv_name import *
 
 def detect_encoding(path: str) -> str:
     try:
@@ -118,6 +117,10 @@ def compute_cell_dcr(csv_path) -> list:
     if df['工步号'].values.astype(int).max() !=17:
         raise ValueError("锐能结果数据中工步号最大值不是17")
 
+    n_packs, cells_num = parse_drag_and_cells(csv_path)
+    if n_packs is None or cells_num is None:
+        raise ValueError("文件名无法解析，无法判定电芯数目以及电测拖数")
+
     df11 = df[df['工步号'] == '11']
     df12 = df[df['工步号'] == '12']
     if df12.empty:
@@ -128,7 +131,7 @@ def compute_cell_dcr(csv_path) -> list:
     row12 = df12.iloc[-1]
     row11 = df11.iloc[-1]
 
-    cols = [c for c in df.columns if re.match(r'^BMS_CellVolt\d+$', c, re.I)]  # 1..408 inclusive
+    cols = [c for c in df.columns if re.match(r'^BMS_CellVolt\d+$', c, re.I)][:n_packs*cells_num]
 
     try:
         vals12 = pd.to_numeric(row12[cols], errors='raise').to_numpy(dtype=float)
@@ -136,8 +139,8 @@ def compute_cell_dcr(csv_path) -> list:
     except Exception as e:
         raise ValueError(f"BMS_CellVolt 列中包含非数值或无法转换为 float: {e}")
 
-    if vals12.shape != (408,) or vals11.shape != (408,):
-        raise ValueError("提取的 BMS_CellVolt 列数目不等于 408")
+    if vals12.shape != (n_packs*cells_num,) or vals11.shape != (n_packs*cells_num,):
+        raise ValueError("提取的 BMS_CellVolt 列数目错误")
 
     result_array = (vals11 - vals12) * 1000 / 297.0
     result_list = [round(float(x), 4) for x in result_array.tolist()]
@@ -146,7 +149,6 @@ def compute_cell_dcr(csv_path) -> list:
 def result_csv_to_json(
     csv_path: str,
     out_jsonl_path: str,
-    n_packs: int = 4,
     chunksize: int = 2000,
     encoding: Optional[str] = None
 ):
@@ -163,17 +165,27 @@ def result_csv_to_json(
 
     header = pd.read_csv(csv_path, nrows=0, encoding=encoding)
     all_cols = clean_cols(list(header.columns))
+    n_packs, cells_num = parse_drag_and_cells(csv_path)
+    if n_packs is None or cells_num is None:
+        raise ValueError("文件名无法解析，无法判定电芯数目以及电测拖数")
 
     temp_cols = [c for c in all_cols if re.match(r'^BMS_BattTemp\d+$', c, re.I)]
     if not temp_cols:
         temp_cols = [c for c in all_cols if c.startswith("BMS_BattTemp")]
-    cell_cols = [c for c in all_cols if re.match(r'^BMS_CellVolt\d+$', c, re.I)]
+    cell_cols = [c for c in all_cols if re.match(r'^BMS_CellVolt\d+$', c, re.I)][:n_packs*cells_num]
     if not cell_cols:
-        cell_cols = [c for c in all_cols if c.startswith("BMS_CellVolt")]
+        cell_cols = [c for c in all_cols if c.startswith("BMS_CellVolt")][:n_packs*cells_num]
+
+    set_cols = [
+        '电压', '电流', '功率',
+        '阶段充电能量', '阶段放电能量', '阶段充电容量', '阶段放电容量', '充电能量', '放电能量',
+        '充电容量', '放电容量', 'BMS_BattVol'
+    ]
 
     def idx_key(col):
         nums = re.findall(r'\d+', col)
         return int(nums[0]) if nums else 0
+
     temp_cols = sorted(temp_cols, key=idx_key)
     cell_cols = sorted(cell_cols, key=idx_key)
 
@@ -234,7 +246,7 @@ def result_csv_to_json(
     rows_out = 0
     src_idx = 0
 
-    reader = pd.read_csv(csv_path, encoding=encoding, usecols=cols_to_read_unique, iterator=True, chunksize=chunksize, low_memory=False)
+    reader = pd.read_csv(csv_path, encoding=encoding, dtype=str, usecols=cols_to_read_unique, iterator=True, chunksize=chunksize, low_memory=False)
     for chunk in reader:
         chunk.columns = clean_cols(list(chunk.columns))
         chunk.dropna(axis=1, how='all', inplace=True)
@@ -245,6 +257,9 @@ def result_csv_to_json(
         for c in cell_cols:
             if c in chunk.columns:
                 chunk[c] = pd.to_numeric(chunk[c], errors="coerce")
+        for c in set_cols:
+            if c in chunk.columns:
+                chunk[c] = pd.to_numeric(chunk[c], errors="coerce").astype("Float64")
 
         for _, row in chunk.iterrows():
             rows_in += 1
@@ -281,7 +296,6 @@ def result_csv_to_json(
                         else:
                             duplicated[fld] = v
                 else:
-                    # 列不存在 -> None
                     duplicated[fld] = None
 
             temp_values = [ None if (c not in chunk.columns) or pd.isna(row.get(c, None)) else float(row.get(c, None)) for c in temp_cols ]
@@ -324,12 +338,12 @@ def result_csv_to_json(
                     out_obj[key] = None if val is None else float(val)
 
                 if dcr_list is not None:
-                    cell_dcr_chunk = dcr_list[i * 102:(i + 1) * 102]
+                    cell_dcr_chunk = dcr_list[i * cells_num:(i + 1) * cells_num]
                     for j, val in enumerate(cell_dcr_chunk, start=1):
                         key = f"cell_dcr{j}"
                         out_obj[key] = None if val is None else float(val)
                 else:
-                    for j in range(1, 103):
+                    for j in range(1, cells_num+1):
                         key = f"cell_dcr{j}"
                         out_obj[key] = None
 
@@ -348,18 +362,18 @@ def result_csv_to_json(
                 out_obj['test_device_name'] = '锐能'
                 out_obj['acquire_time'] = str(pd.to_datetime(out_obj['acquire_time'].replace('/', ' '),
                                                            format='%Y-%m-%d %H:%M:%S.%f'))
-
+                out_obj['vehicle_to_pack_num'] = f'1拖{n_packs}'
                 src_idx += 1
 
                 fout.write(json.dumps(out_obj, ensure_ascii=False) + "\n")
                 rows_out += 1
 
     fout.close()
-    return {"rows_in": rows_in, "rows_out": rows_out, "outfile": out_jsonl_path}
+    return {"rows_in": rows_in, "rows_out": rows_out, "outfile": out_jsonl_path, "vehicle_to_pack": {vehicle_first: pack_codes}}
 
 
 if __name__ == "__main__":
-    csv_path = r"D:\jz_pack_data\01\2025-09-17\备份\锐能@DT2459A-F9G-0000006@03HPB0DA0001BWF9G0000081@330阶梯充一拖四1P102S DCR@20250916183907@20250917001729@通道1@@工步层.csv"
+    csv_path = r"D:\jz_pack_data\09\锐能@DT2503-FAT-1001928@03HPB0HK0002BWFAT0000142@330阶梯充一拖四1P102S DCR@20251027042843@20251027101313@通道2@@工步层.csv"
     out_jsonl = csv_path.replace(".csv", "_processed.jsonl")
-    res = result_csv_to_json(csv_path, out_jsonl, n_packs=4, chunksize=2000)
+    res = result_csv_to_json(csv_path, out_jsonl, chunksize=2000)
     print("done:", res)

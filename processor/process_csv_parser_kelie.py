@@ -1,9 +1,8 @@
 import pandas as pd
 import json
-import os
-import re
 import numpy as np
 from typing import List, Optional
+from processor.parser_csv_name import *
 
 def clean_str(s: Optional[str]) -> Optional[str]:
     if s is None:
@@ -57,8 +56,12 @@ def get_pack_codes_from_step_file(record_file: str) -> List[str]:
     if not os.path.exists(step_file):
         raise FileNotFoundError(f"找不到工步层文件: {step_file}")
     df_step = pd.read_csv(step_file, dtype=str, low_memory=False)
+    drag, cells_num = parse_drag_and_cells_for_kelie(step_file)
+
     if "电池包码" not in df_step.columns:
         raise ValueError("工步层文件缺少 '电池包码' 列")
+    if drag is None or cells_num is None:
+        raise ValueError("文件名无法解析，无法判定电芯数目以及电测拖数")
     pack_codes = (
         df_step["电池包码"]
         .dropna()
@@ -69,13 +72,27 @@ def get_pack_codes_from_step_file(record_file: str) -> List[str]:
         .unique()
         .tolist()
     )
-    if len(pack_codes) != 4:
-        raise ValueError(f"电池包码数量不是4个: {pack_codes}")
-    return pack_codes
+
+    vehicle_code = (
+        df_step["车辆码"]
+        .dropna()
+        .astype(str)
+        .map(clean_str)
+        .map(lambda x: x if x != "" else None)
+        .dropna()
+        .unique()
+        .tolist()
+    )
+
+    if len(pack_codes) != drag:
+        raise ValueError(f"电池包码数量与电测拖数不一致")
+    if len(vehicle_code) != 1:
+        raise ValueError(f"车辆码数量不是1个: {vehicle_code}")
+    return pack_codes, vehicle_code, drag, cells_num
 
 def process_csv_to_json_kelie(csv_path: str,
                         out_jsonl_path: str):
-    pack_codes = get_pack_codes_from_step_file(csv_path)
+    pack_codes, vehicle_code, drag, cells_num = get_pack_codes_from_step_file(csv_path)
     print("电池包码:", pack_codes)
 
     df = pd.read_csv(csv_path, dtype=str, low_memory=False)
@@ -90,7 +107,7 @@ def process_csv_to_json_kelie(csv_path: str,
         df = df.drop(columns=drop_cols)
 
     temp_cols = [c for c in df.columns if c and c.startswith("CellTemp")]
-    volt_cols = [c for c in df.columns if c and c.startswith("CellVolt")]
+    volt_cols = [c for c in df.columns if c and c.startswith("CellVolt")][:drag*cells_num]
 
     def idx_key(col):
         nums = re.findall(r'\d+', col)
@@ -98,16 +115,26 @@ def process_csv_to_json_kelie(csv_path: str,
     temp_cols = sorted(temp_cols, key=idx_key)
     volt_cols = sorted(volt_cols, key=idx_key)
 
-    if len(temp_cols) != 32 or len(volt_cols) != 408:
-        raise ValueError(f"温度列数={len(temp_cols)}, 电压列数={len(volt_cols)}, 应为32和408")
+    if len(temp_cols) % len(pack_codes) != 0 or len(volt_cols) != cells_num * drag:
+        raise ValueError(f"温度列数={len(temp_cols)}, 电压列数={len(volt_cols)}, 错误")
+
+    temps_num = int(len(temp_cols) // len(pack_codes))
 
     other_cols = [c for c in KEEP_COLS_CH if c in df.columns]
+
+    set_cols = [
+        '电压', '电流', '功率',
+        '阶段充电能量', '阶段放电能量', '阶段充电容量', '阶段放电容量',
+        '充电能量', '放电能量', '充电容量', '放电容量','BatVoltage'
+    ]
 
     json_records = []
 
     for c in temp_cols:
         df[c] = pd.to_numeric(df[c], errors='coerce')
     for c in volt_cols:
+        df[c] = pd.to_numeric(df[c], errors='coerce')
+    for c in set_cols:
         df[c] = pd.to_numeric(df[c], errors='coerce')
 
     for idx, row in df.iterrows():
@@ -130,22 +157,23 @@ def process_csv_to_json_kelie(csv_path: str,
         temps = row[temp_cols].to_numpy(dtype=float)  # length 32
         volts = row[volt_cols].to_numpy(dtype=float)  # length 408
 
-        for i in range(4):
+        for i in range(drag):
             pack_data = {}
             pack_data['pack_code'] = clean_str(pack_codes[i])
+            pack_data['vehicle_code'] = clean_str(vehicle_code[0])
 
             for k, v in other_data.items():
                 pack_data[k] = v
 
-            temp_chunk = temps[i*8:(i+1)*8]
-            volt_chunk = volts[i*102:(i+1)*102]
+            temp_chunk = temps[i*temps_num:(i+1)*temps_num]
+            volt_chunk = volts[i*cells_num:(i+1)*cells_num]
 
-            for j in range(8):
+            for j in range(temps_num):
                 key = f"BMS_BattTemp{j+1}"
                 val = temp_chunk[j] if j < len(temp_chunk) else np.nan
                 pack_data[key] = None if pd.isna(val) else float(val)
 
-            for j in range(102):
+            for j in range(cells_num):
                 key = f"BMS_CellVolt{j+1}"
                 val = volt_chunk[j] / 1000 if j < len(volt_chunk) else np.nan
                 pack_data[key] = None if pd.isna(val) else float(val)
@@ -180,7 +208,7 @@ def process_csv_to_json_kelie(csv_path: str,
             pack_data['test_device_name'] = '科列'
             pack_data['acquire_time'] = str(pd.to_datetime(pack_data['acquire_time'].replace('/', ' '),
                                                        format='%Y-%m-%d %H:%M:%S.%f'))
-
+            pack_data['vehicle_to_pack_num'] = f'1拖{drag}'
             json_records.append(pack_data)
 
     # out_file = record_file.replace(".csv", "_processed.jsonl")
@@ -192,7 +220,7 @@ def process_csv_to_json_kelie(csv_path: str,
 
 
 if __name__ == "__main__":
-    record_file = r"C:\Users\HP\PycharmProjects\ftp2kafka_project\data\incoming\data_ftp_upload_pack_电测_02_2025-09-28_锐能_DT2528A-F9V-0000207_03HPB0DA0001BWF9V0000025_330阶梯充一拖四-科列1P102S_DCR_20250927222956_20250928041456_通道2\锐能@DT2528A-F9V-0000207@03HPB0DA0001BWF9V0000025@330阶梯充一拖四-科列1P102S DCR@20250927222956@20250928041456@通道2@@记录层.csv"
+    record_file = r"D:\jz_pack_data\14\锐能@DT2528A-FAK-0000602@03HPB0DA0001BWFAK0000065@330阶梯充一拖四-科列1P102S DCR@20251019185239@20251020004017@通道2@@记录层.csv"
     out_file = record_file.replace(".csv", "_processed.jsonl")
-    process_csv_to_json(record_file, out_file)
+    process_csv_to_json_kelie(record_file, out_file)
 

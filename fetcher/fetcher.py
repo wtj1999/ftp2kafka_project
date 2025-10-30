@@ -1,36 +1,26 @@
-# fetcher.py
 import os
 import json
 import ftplib
 import logging
-import tempfile
 from typing import Dict, List, Optional, Tuple
-from pathlib import PurePosixPath
 import time
 import datetime
 import posixpath
-import errno
-import socket
-import functools
-import traceback
-import os.path as osp
 from dotenv import load_dotenv
-from fetcher.ftp_info import get_remote_file_info
 from fetcher.ftp_file import list_files_for_date
 
-load_dotenv()  # 如果使用 .env 文件
+load_dotenv()
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("fetcher")
 
-# ========== 配置（可以从环境变量读取，也可以在实例化时覆盖） ==========
 FTP_HOST = os.getenv("FTP_HOST")
 FTP_PORT = int(os.getenv("FTP_PORT", "21"))
 FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS", "")
-FTP_ROOT = os.getenv("FTP_ROOT", "/")   # 从哪个目录开始递归查找
-LOCAL_WORKDIR = os.getenv("LOCAL_WORKDIR", "./tmp_fetch")  # 本地临时目录
-PROCESSED_DB = os.getenv("PROCESSED_DB", "./processed.json")  # 已处理记录文件
+FTP_ROOT = os.getenv("FTP_ROOT", "/")
+LOCAL_WORKDIR = os.getenv("LOCAL_WORKDIR", "./tmp_fetch")
+PROCESSED_DB = os.getenv("PROCESSED_DB", "./processed.json")
 BRANCH_MAX = int(os.getenv("BRANCH_MAX", "14"))
 
 
@@ -49,12 +39,6 @@ def _safe_sendcmd(ftp: ftplib.FTP, cmd: str) -> Optional[str]:
     except Exception:
         return None
 
-
-
-
-
-
-# ========== 已处理记录管理 ==========
 class ProcessedDB:
     def __init__(self, path: str = PROCESSED_DB):
         self.path = path
@@ -133,20 +117,9 @@ class FTPFetcher:
             self._conn = None
 
     def _remote_full_path(self, p: str) -> str:
-        # ensure posix style
         return p.replace("\\", "/")
 
     def find_pairs(self) -> Dict[str, Dict]:
-        """
-        在 FTP 上查找所有文件，识别成对的记录层/工步层：
-        - 以后缀 '@@工步层.csv' / '@@记录层.csv' 匹配
-        - 以文件名前缀（去掉后缀部分）作为 pair_key
-        返回 mapping:
-        {
-          pair_key1: { 'step': remote_path, 'record': remote_path, 'step_info': {...}, 'record_info': {...} },
-          ...
-        }
-        """
         if not self._conn:
             self.connect()
         ftp = self._conn
@@ -172,7 +145,6 @@ class FTPFetcher:
             if "step" in info and "record" in info:
                 step_info = {}#get_remote_file_info(ftp, info["step"])
                 record_info = {}#get_remote_file_info(ftp, info["record"])
-                # build meta string to detect changes: combine paths + mdtm + size
                 meta_str = "|".join([
                     info["step"],
                     str(step_info.get("mdtm") or ""),
@@ -209,18 +181,6 @@ class FTPFetcher:
             return False
 
     def fetch_new_pairs(self) -> List[Dict]:
-        """
-        查找 FTP 上的新配对，下载到本地并返回本地文件信息列表。
-        返回每个元素为 dict:
-        {
-          "pair_key": prefix,
-          "remote_step": remote_path,
-          "remote_record": remote_path,
-          "local_step": local_path,
-          "local_record": local_path,
-          "meta_str": meta_str
-        }
-        """
         if not self._conn:
             self.connect()
 
@@ -231,12 +191,10 @@ class FTPFetcher:
             if self.processed_db.is_processed(prefix, meta):
                 logger.debug("已处理，跳过: %s", prefix)
                 continue
-            # add to download list
             to_download.append((prefix, info))
 
         results = []
         for prefix, info in to_download:
-            # download both files into local_workdir/prefix/
             safe_local_dir = os.path.join(self.local_workdir, self._safe_filename(prefix).lstrip("_"))
             ensure_dir(safe_local_dir)
             local_step = os.path.join(safe_local_dir, posixpath.basename(info["step"]))
@@ -279,9 +237,6 @@ class FTPFetcher:
         logger.info("标记为已处理: %s", pair_key)
 
     def cleanup_local(self, local_paths: List[str], remove_empty_parent: bool = True):
-        """
-        删除本地临时文件（在成功上传 Kafka 后调用）
-        """
         for p in local_paths:
             try:
                 if os.path.isdir(p):
@@ -334,21 +289,20 @@ class FTPFetcher:
         self.close()
 
 
-# ========== 示例用法 ==========
-if __name__ == "__main__":
-    fetcher = FTPFetcher(
-        host=FTP_HOST,
-        port=FTP_PORT,
-        user=FTP_USER,
-        password=FTP_PASS,
-        root=FTP_ROOT,
-        local_workdir=LOCAL_WORKDIR,
-        processed_db_path=PROCESSED_DB,
-    )
-    try:
-        fetcher.connect()
-        pairs = fetcher.fetch_new_pairs()
-        for p in pairs:
-            logger.info("本地文件 pair: %s", p)
-    finally:
-        fetcher.close()
+# if __name__ == "__main__":
+#     fetcher = FTPFetcher(
+#         host=FTP_HOST,
+#         port=FTP_PORT,
+#         user=FTP_USER,
+#         password=FTP_PASS,
+#         root=FTP_ROOT,
+#         local_workdir=LOCAL_WORKDIR,
+#         processed_db_path=PROCESSED_DB,
+#     )
+#     try:
+#         fetcher.connect()
+#         pairs = fetcher.fetch_new_pairs()
+#         for p in pairs:
+#             logger.info("本地文件 pair: %s", p)
+#     finally:
+#         fetcher.close()
