@@ -117,7 +117,7 @@ def compute_cell_dcr(csv_path) -> list:
     if df['工步号'].values.astype(int).max() !=17:
         raise ValueError("锐能结果数据中工步号最大值不是17")
 
-    n_packs, cells_num = parse_drag_and_cells(csv_path)
+    n_packs, cells_num, test_step_config = parse_drag_and_cells(csv_path)
     if n_packs is None or cells_num is None:
         raise ValueError("文件名无法解析，无法判定电芯数目以及电测拖数")
 
@@ -165,7 +165,7 @@ def result_csv_to_json(
 
     header = pd.read_csv(csv_path, nrows=0, encoding=encoding)
     all_cols = clean_cols(list(header.columns))
-    n_packs, cells_num = parse_drag_and_cells(csv_path)
+    n_packs, cells_num, test_step_config = parse_drag_and_cells(csv_path)
     if n_packs is None or cells_num is None:
         raise ValueError("文件名无法解析，无法判定电芯数目以及电测拖数")
 
@@ -362,18 +362,19 @@ def result_csv_to_json(
                 out_obj['test_device_name'] = '锐能'
                 out_obj['acquire_time'] = str(pd.to_datetime(out_obj['acquire_time'].replace('/', ' '),
                                                            format='%Y-%m-%d %H:%M:%S.%f'))
-                out_obj['vehicle_to_pack_num'] = f'1拖{n_packs}'
+                out_obj['vehicle_to_pack_num'] = test_step_config
                 src_idx += 1
 
                 fout.write(json.dumps(out_obj, ensure_ascii=False) + "\n")
                 rows_out += 1
 
     fout.close()
-    return {"rows_in": rows_in, "rows_out": rows_out, "outfile": out_jsonl_path, "vehicle_to_pack": {vehicle_first: pack_codes}}
+    vehicle_to_pack = {"vehicle_code":vehicle_first, "pack_codes": pack_codes}
+    return {"rows_in": rows_in, "rows_out": rows_out, "outfile": out_jsonl_path, "vehicle_to_pack": vehicle_to_pack}
 
 
 if __name__ == "__main__":
-    csv_path = r"D:\jz_pack_data\09\锐能@DT2503-FAT-1001928@03HPB0HK0002BWFAT0000142@330阶梯充一拖四1P102S DCR@20251027042843@20251027101313@通道2@@工步层.csv"
+    csv_path = r"D:\jz_pack_data\14\锐能@DT24102D-G24-0000024@03HPB0DA0001BWG240000029@330阶梯充一拖四1P102S DCR@20260205212835@20260206031845@通道1@@工步层.csv"
     out_jsonl = csv_path.replace(".csv", "_processed.jsonl")
     res = result_csv_to_json(csv_path, out_jsonl, chunksize=2000)
     print("done:", res)

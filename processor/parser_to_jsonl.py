@@ -3,6 +3,7 @@ from processor.process_csv_parser import process_csv_to_json
 from processor.result_csv_parser import result_csv_to_json
 from processor.process_csv_parser_kelie import process_csv_to_json_kelie
 from processor.result_csv_parser_kelie import result_csv_to_json_kelie
+from processor.process_kafka_data import process_tree_data
 import logging
 import os
 from dotenv import load_dotenv
@@ -21,6 +22,7 @@ def process_and_send_pairs(
     topic_record: str,
     topic_step: str,
     topic_vehicle: str,
+    topic_pred: str,
     delete_csv_after_send: bool = True,
     dry_run: bool = True,
     delete_jsonl_after_send: bool = False
@@ -114,6 +116,7 @@ def process_and_send_pairs(
                     results["kafka_failed"] += 1
             else:
                 logger.info("record jsonl 文件不存在或未生成，跳过发送: %s", rec_jsonl)
+            
 
             # 发送 step jsonl
             step_exists = bool(step_jsonl and os.path.exists(step_jsonl))
@@ -133,7 +136,21 @@ def process_and_send_pairs(
                 try:
                     send_jsonl_to_kafka_confluent1(all_results['vehicle_to_pack'], topic_vehicle, producer)
                 except Exception as e:
-                    logger.exception("发送 step jsonl 到 Kafka 失败: %s. 错误: %s", step_jsonl, e)
+                    logger.exception("发送 车辆码->pack码映射关系到 Kafka 失败 %s",  e)
+
+            pred_result = None
+            if step_exists:
+                try:
+                    pred_result = process_tree_data(file_path=step_jsonl)
+                    logger.info("预测结果 pred_result: %s", pred_result)
+                except Exception as e:
+                    logger.exception("预测算法调用失败: %s", e)
+
+            if pred_result:
+                try:
+                    send_jsonl_to_kafka_confluent1(pred_result, topic_pred, producer)
+                except Exception as e:
+                    logger.exception("发送预测结果到 Kafka 失败: %s", e)
 
             if (rec_res.get("failed", 0) == 0) and (step_res.get("failed", 0) == 0):
                 fetcher.mark_processed(pair_key, remote_meta)

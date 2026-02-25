@@ -56,7 +56,7 @@ def get_pack_codes_from_step_file(record_file: str) -> List[str]:
     if not os.path.exists(step_file):
         raise FileNotFoundError(f"找不到工步层文件: {step_file}")
     df_step = pd.read_csv(step_file, dtype=str, low_memory=False)
-    drag, cells_num = parse_drag_and_cells(step_file)
+    drag, cells_num, test_step_config = parse_drag_and_cells(step_file)
 
     if "电池包码" not in df_step.columns:
         raise ValueError("工步层文件缺少 '电池包码' 列")
@@ -87,11 +87,11 @@ def get_pack_codes_from_step_file(record_file: str) -> List[str]:
         raise ValueError(f"电池包码数量与电测拖数不一致")
     if len(vehicle_code) != 1:
         raise ValueError(f"车辆码数量不是1个: {vehicle_code}")
-    return pack_codes, vehicle_code, drag, cells_num
+    return pack_codes, vehicle_code, drag, cells_num, test_step_config
 
 def process_csv_to_json(csv_path: str,
                         out_jsonl_path: str):
-    pack_codes, vehicle_code, drag, cells_num = get_pack_codes_from_step_file(csv_path)
+    pack_codes, vehicle_code, drag, cells_num, test_step_config = get_pack_codes_from_step_file(csv_path)
     print("电池包码:", pack_codes)
 
     df = pd.read_csv(csv_path, dtype=str, low_memory=False)
@@ -206,7 +206,7 @@ def process_csv_to_json(csv_path: str,
             # pack_data["_source_row_idx"] = int(idx)
             pack_data['test_device_name'] = '锐能'
             pack_data['acquire_time'] = str(pd.to_datetime(pack_data['acquire_time'].replace('/', ' '), format='%Y-%m-%d %H:%M:%S.%f'))
-            pack_data['vehicle_to_pack_num'] = f'1拖{drag}'
+            pack_data['vehicle_to_pack_num'] = test_step_config
             json_records.append(pack_data)
 
     # out_file = record_file.replace(".csv", "_processed.jsonl")

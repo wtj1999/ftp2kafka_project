@@ -28,6 +28,7 @@ KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP_SERVERS")
 TOPIC_RECORD = os.getenv("TOPIC_RECORD", "topic_record")
 TOPIC_STEP = os.getenv("TOPIC_STEP", "topic_step")
 TOPIC_VEHICLE = os.getenv("TOPIC_VEHICLE", "topic_vehicle")
+TOPIC_PRED = os.getenv("TOPIC_PRED", "topic_pred")
 
 # logging
 logger = logging.getLogger("ftp2kafka.poller")
@@ -76,6 +77,7 @@ def main_loop():
                 topic_record=TOPIC_RECORD,
                 topic_step=TOPIC_STEP,
                 topic_vehicle=TOPIC_VEHICLE,
+                topic_pred=TOPIC_PRED,
                 delete_csv_after_send=True,
                 dry_run=False,
                 delete_jsonl_after_send=True

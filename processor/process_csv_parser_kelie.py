@@ -56,7 +56,7 @@ def get_pack_codes_from_step_file(record_file: str) -> List[str]:
     if not os.path.exists(step_file):
         raise FileNotFoundError(f"找不到工步层文件: {step_file}")
     df_step = pd.read_csv(step_file, dtype=str, low_memory=False)
-    drag, cells_num = parse_drag_and_cells_for_kelie(step_file)
+    drag, cells_num, test_step_config = parse_drag_and_cells_for_kelie(step_file)
 
     if "电池包码" not in df_step.columns:
         raise ValueError("工步层文件缺少 '电池包码' 列")
@@ -88,12 +88,48 @@ def get_pack_codes_from_step_file(record_file: str) -> List[str]:
         raise ValueError(f"电池包码数量与电测拖数不一致")
     if len(vehicle_code) != 1:
         raise ValueError(f"车辆码数量不是1个: {vehicle_code}")
-    return pack_codes, vehicle_code, drag, cells_num
+    return pack_codes, vehicle_code, drag, cells_num, test_step_config
+
+def remake_csv_kelie(csv_path: str):
+    df = pd.read_csv(csv_path)
+    all_cols = list(df.columns)
+    n_packs, cells_num, test_step_config = parse_drag_and_cells_for_kelie(csv_path)
+    temp_cols = [c for c in all_cols if re.match(r'^CellTemp\d+$', c, re.I)]
+    cell_cols = [c for c in all_cols if re.match(r'^CellVolt\d+$', c, re.I)]
+    if len(cell_cols) > n_packs * cells_num:
+        volt_df = df[cell_cols].loc[:, (df[cell_cols] >= 100).any(axis=0)]
+        if volt_df.columns.tolist() == [f'CellVolt{i:03d}' for i in range(1, n_packs * cells_num+1)]:
+            required_volt_cols = volt_df.columns
+            required_temp_cols = temp_cols[:n_packs * 8]
+        elif volt_df.columns.tolist() == [f'CellVolt{i:03d}' for i in range(n_packs * cells_num+1, 2 * n_packs * cells_num+1)]:
+            required_volt_cols = volt_df.columns
+            required_temp_cols = temp_cols[n_packs * 8:]
+        else:
+            return
+        other_cols = [col for col in df.columns if col not in temp_cols and col not in cell_cols]
+        selected_df = df[other_cols + list(required_volt_cols) + list(required_temp_cols)]
+        new_volt_names = {col: f'CellVolt{i:03d}' for i, col in enumerate(required_volt_cols, 1)}
+        new_temp_names = {col: f'CellTemp{i:02d}' for i, col in enumerate(required_temp_cols, 1)}
+
+        rename_mapping = {**new_volt_names, **new_temp_names}
+
+        selected_df = selected_df.rename(columns=rename_mapping)
+
+        out_csv_path = csv_path.replace('.csv', '_remake.csv')
+        selected_df.to_csv(out_csv_path, index=False)
+        return out_csv_path
+    else:
+        return
 
 def process_csv_to_json_kelie(csv_path: str,
                         out_jsonl_path: str):
-    pack_codes, vehicle_code, drag, cells_num = get_pack_codes_from_step_file(csv_path)
+    pack_codes, vehicle_code, drag, cells_num, test_step_config = get_pack_codes_from_step_file(csv_path)
     print("电池包码:", pack_codes)
+
+    out_csv_path = remake_csv_kelie(csv_path)
+
+    if out_csv_path:
+        csv_path = out_csv_path
 
     df = pd.read_csv(csv_path, dtype=str, low_memory=False)
     df.columns = [clean_str(c) for c in df.columns]
@@ -208,7 +244,7 @@ def process_csv_to_json_kelie(csv_path: str,
             pack_data['test_device_name'] = '科列'
             pack_data['acquire_time'] = str(pd.to_datetime(pack_data['acquire_time'].replace('/', ' '),
                                                        format='%Y-%m-%d %H:%M:%S.%f'))
-            pack_data['vehicle_to_pack_num'] = f'1拖{drag}'
+            pack_data['vehicle_to_pack_num'] = test_step_config
             json_records.append(pack_data)
 
     # out_file = record_file.replace(".csv", "_processed.jsonl")

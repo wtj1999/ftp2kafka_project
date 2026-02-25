@@ -3,16 +3,17 @@ version: "3.8"
 
 services:
   app:
-    build: .
+    build:
+      context: .
+      network: host
     image: ftp2kafka_app:latest
     container_name: ftp2kafka_app
     restart: unless-stopped
+    network_mode: host
     env_file:
       - .env            # 从项目根读取 .env
     volumes:
-      - ./data:/data            # 本地 data 目录（LOCAL_WORKDIR / PROCESSED_DB 等）
-      - ./logs:/var/log/ftp2kafka
-      - ./certs:/etc/ssl/certs:ro   # 如果需要 TLS 证书（可选）
+      - /data/ftp2kafka_jz2_pack/catboost_models:/app/catboost_models
     logging:
       driver: "json-file"
       options:

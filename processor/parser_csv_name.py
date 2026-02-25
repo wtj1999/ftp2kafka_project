@@ -23,7 +23,7 @@ def _chinese_to_int(s: str) -> Optional[int]:
             return None
     return total if total != 0 else None
 
-def parse_drag_and_cells(path: str) -> Tuple[Optional[int], Optional[int]]:
+def parse_drag_and_cells(path: str) -> Tuple[Optional[int], Optional[int], Optional[str]]:
     basename = os.path.splitext(os.path.basename(path))[0]
 
     drag_match = re.search(r'一拖\s*([一二三四五六七八九\d])', basename)
@@ -40,9 +40,15 @@ def parse_drag_and_cells(path: str) -> Tuple[Optional[int], Optional[int]]:
         except Exception:
             cells = None
 
-    return drag_count, cells
+    parts = basename.split('@')
+    if len(parts) >= 6:
+        test_step_config = parts[3]
+    else:
+        test_step_config = None
 
-def parse_drag_and_cells_for_kelie(path: str) -> Tuple[Optional[int], Optional[int]]:
+    return drag_count, cells, test_step_config
+
+def parse_drag_and_cells_for_kelie(path: str) -> Tuple[Optional[int], Optional[int], Optional[int]]:
     basename = os.path.splitext(os.path.basename(path))[0]
 
     drag_match = re.search(r'一拖\s*([一二三四五六七八九\d])', basename)
@@ -59,10 +65,18 @@ def parse_drag_and_cells_for_kelie(path: str) -> Tuple[Optional[int], Optional[i
         except Exception:
             cells = None
 
-    return drag_count, cells
+    parts = basename.split('@')
+
+    if len(parts) >= 6:
+        test_step_config = parts[3]
+    else:
+        test_step_config = None
+
+    return drag_count, cells, test_step_config
 
 if __name__ == "__main__":
-    fn = r"D:\jz_pack_data\01\2025-09-17\备份\锐能@DT2459A-F9G-0000006@03HPB0DA0001BWF9G0000081@330阶梯充一拖四1P102S DCR@20250916183907@20250917001729@通道1@@工步层.csv"
-    drag, cells = parse_drag_and_cells(fn)
+    fn = r"D:\jz_pack_data\01\2025-09-17\备份\锐能@DT2528A-FAK-0000602@03HPB0DA0001BWFAK0000065@330阶梯充一拖四-科列1P102S DCR@20251019185239@20251020004017@通道2@@记录层.csv"#锐能@DT2459A-F9G-0000006@03HPB0DA0001BWF9G0000081@330阶梯充一拖四1P102S DCR@20250916183907@20250917001729@通道1@@工步层.csv"
+    drag, cells, ax = parse_drag_and_cells_for_kelie(fn)
     print("drag_count:", drag)
     print("cells:", cells)
+    print(ax)

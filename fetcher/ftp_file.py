@@ -106,7 +106,7 @@ def list_files_for_date(ftp: ftplib.FTP, base_root: str, day: Optional[datetime.
 
     for i in range(1, branch_max + 1):
         branch = f"{i:02d}"
-        candidate_backup = posixpath.join(base_root, branch, date_str, "备份")
+        candidate_backup = posixpath.join(base_root, branch, date_str)#, "备份")
         try:
             ftp.cwd(candidate_backup)
             if cur_pwd is not None:

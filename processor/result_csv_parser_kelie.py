@@ -4,6 +4,8 @@ import json
 from typing import List, Optional
 import pandas as pd
 import numpy as np
+from pkg_resources import require
+
 from processor.parser_csv_name import *
 
 def detect_encoding(path: str) -> str:
@@ -119,7 +121,7 @@ def compute_cell_dcr(csv_path) -> list:
     if df['工步号'].values.astype(int).max() !=15 and df['工步号'].values.astype(int).max() !=17:
         raise ValueError("科列结果数据中工步号最大值不是15和17")
 
-    n_packs, cells_num = parse_drag_and_cells_for_kelie(csv_path)
+    n_packs, cells_num, test_step_config = parse_drag_and_cells_for_kelie(csv_path)
     if n_packs is None or cells_num is None:
         raise ValueError("文件名无法解析，无法判定电芯数目以及电测拖数")
 
@@ -148,12 +150,51 @@ def compute_cell_dcr(csv_path) -> list:
     result_list = [round(float(x), 4) for x in result_array.tolist()]
     return result_list
 
+def remake_csv_kelie(csv_path: str):
+    df = pd.read_csv(csv_path)
+    all_cols = clean_cols(list(df.columns))
+    n_packs, cells_num, test_step_config = parse_drag_and_cells_for_kelie(csv_path)
+    temp_cols = [c for c in all_cols if re.match(r'^CellTemp\d+$', c, re.I)]
+    cell_cols = [c for c in all_cols if re.match(r'^CellVolt\d+$', c, re.I)]
+    if len(cell_cols) > n_packs * cells_num:
+        volt_df = df[cell_cols].loc[:, (df[cell_cols] >= 100).any(axis=0)]
+        if volt_df.columns.tolist() == [f'CellVolt{i:03d}' for i in range(1, n_packs * cells_num+1)]:
+            required_volt_cols = volt_df.columns
+            required_temp_cols = temp_cols[:n_packs * 8]
+        elif volt_df.columns.tolist() == [f'CellVolt{i:03d}' for i in range(n_packs * cells_num+1, 2 * n_packs * cells_num+1)]:
+            required_volt_cols = volt_df.columns
+            required_temp_cols = temp_cols[n_packs * 8:]
+        else:
+            return
+        other_cols = [col for col in df.columns if col not in temp_cols and col not in cell_cols]
+        selected_df = df[other_cols + list(required_volt_cols) + list(required_temp_cols)]
+        new_volt_names = {col: f'CellVolt{i:03d}' for i, col in enumerate(required_volt_cols, 1)}
+        new_temp_names = {col: f'CellTemp{i:02d}' for i, col in enumerate(required_temp_cols, 1)}
+
+        rename_mapping = {**new_volt_names, **new_temp_names}
+
+        selected_df = selected_df.rename(columns=rename_mapping)
+
+        out_csv_path = csv_path.replace('.csv', '_remake.csv')
+        selected_df.to_csv(out_csv_path, index=False)
+        return out_csv_path
+    else:
+        return
+
+
+
 def result_csv_to_json_kelie(
     csv_path: str,
     out_jsonl_path: str,
     chunksize: int = 2000,
     encoding: Optional[str] = None
 ):
+
+    out_csv_path = remake_csv_kelie(csv_path)
+
+    if out_csv_path:
+        csv_path = out_csv_path
+
     if encoding is None:
         encoding = detect_encoding(csv_path)
 
@@ -167,7 +208,7 @@ def result_csv_to_json_kelie(
 
     header = pd.read_csv(csv_path, nrows=0, encoding=encoding)
     all_cols = clean_cols(list(header.columns))
-    n_packs, cells_num = parse_drag_and_cells_for_kelie(csv_path)
+    n_packs, cells_num, test_step_config = parse_drag_and_cells_for_kelie(csv_path)
     if n_packs is None or cells_num is None:
         raise ValueError("文件名无法解析，无法判定电芯数目以及电测拖数")
 
@@ -365,18 +406,19 @@ def result_csv_to_json_kelie(
                 out_obj['test_device_name'] = '科列'
                 out_obj['acquire_time'] = str(pd.to_datetime(out_obj['acquire_time'].replace('/', ' '),
                                                          format='%Y-%m-%d %H:%M:%S.%f'))
-                out_obj['vehicle_to_pack_num'] = f'1拖{n_packs}'
+                out_obj['vehicle_to_pack_num'] = test_step_config
                 src_idx += 1
 
                 fout.write(json.dumps(out_obj, ensure_ascii=False) + "\n")
                 rows_out += 1
 
     fout.close()
-    return {"rows_in": rows_in, "rows_out": rows_out, "outfile": out_jsonl_path, "vehicle_to_pack": {vehicle_first: pack_codes}}
+    vehicle_to_pack = {"vehicle_code": vehicle_first, "pack_codes": pack_codes}
+    return {"rows_in": rows_in, "rows_out": rows_out, "outfile": out_jsonl_path, "vehicle_to_pack": vehicle_to_pack}
 
 
 if __name__ == "__main__":
-    csv_path = r'D:\jz_pack_data\09\锐能@DT2528A-F9X-0000309@03HPB0DA0001BWF9X0000033@330阶梯充一拖四-科列102SDCR@20250930014547@20250930061348@通道1@@工步层.csv'
+    csv_path = r'D:\jz_pack_data\14\锐能@DT2528A-G2R-0001833@03HPB0DA0001BWG2R0000113@330一拖四充放电 测试科列1P102S@20260225023039@20260225023357@通道2@@工步层.csv'
     out_jsonl = csv_path.replace(".csv", "_processed.jsonl")
     res = result_csv_to_json_kelie(csv_path, out_jsonl)
     print("done:", res)
