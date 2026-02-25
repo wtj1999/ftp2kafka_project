@@ -1,0 +1,6 @@
+﻿target,gt_col,pred_col,n_gt_nonnull,n_with_pred,n_mape_used,mae,mape_pct,r2
+discharge energy,discharge_energy_ground_truth,discharge_energy_pred,57,57,57,1483.7312280701763,0.36599624175895384,0.9986487177279213
+discharge capacity,discharge_capacity_ground_truth,discharge_capacity_pred,57,57,57,1.4986217543859652,0.4458684891092843,-2.19707759723924
+vehicle dcr,vehicle_dcr_ground_truth,vehicle_dcr_pred,58,58,58,0.0027278246551724126,2.829863332940904,0.9232177195712208
+volt range 14,volt_range_14_ground_truth,volt_range_14_pred,57,57,57,0.012626567017543859,7.666672448454931,0.7683895686078126
+volt range 15,volt_range_15_ground_truth,volt_range_15_pred,57,57,57,0.012570687105263155,13.94803737755804,0.6980322808114768

@@ -1,0 +1,57 @@
+[
+  {
+    "target":"discharge energy",
+    "gt_col":"discharge_energy_ground_truth",
+    "pred_col":"discharge_energy_pred",
+    "n_gt_nonnull":57,
+    "n_with_pred":57,
+    "n_mape_used":57,
+    "mae":1483.7312280702,
+    "mape_pct":0.3659962418,
+    "r2":0.9986487177
+  },
+  {
+    "target":"discharge capacity",
+    "gt_col":"discharge_capacity_ground_truth",
+    "pred_col":"discharge_capacity_pred",
+    "n_gt_nonnull":57,
+    "n_with_pred":57,
+    "n_mape_used":57,
+    "mae":1.4986217544,
+    "mape_pct":0.4458684891,
+    "r2":-2.1970775972
+  },
+  {
+    "target":"vehicle dcr",
+    "gt_col":"vehicle_dcr_ground_truth",
+    "pred_col":"vehicle_dcr_pred",
+    "n_gt_nonnull":58,
+    "n_with_pred":58,
+    "n_mape_used":58,
+    "mae":0.0027278247,
+    "mape_pct":2.8298633329,
+    "r2":0.9232177196
+  },
+  {
+    "target":"volt range 14",
+    "gt_col":"volt_range_14_ground_truth",
+    "pred_col":"volt_range_14_pred",
+    "n_gt_nonnull":57,
+    "n_with_pred":57,
+    "n_mape_used":57,
+    "mae":0.012626567,
+    "mape_pct":7.6666724485,
+    "r2":0.7683895686
+  },
+  {
+    "target":"volt range 15",
+    "gt_col":"volt_range_15_ground_truth",
+    "pred_col":"volt_range_15_pred",
+    "n_gt_nonnull":57,
+    "n_with_pred":57,
+    "n_mape_used":57,
+    "mae":0.0125706871,
+    "mape_pct":13.9480373776,
+    "r2":0.6980322808
+  }
+]
