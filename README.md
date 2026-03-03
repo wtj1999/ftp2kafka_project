@@ -191,15 +191,15 @@ docker-compose logs -f
 
 ### 模型性能评估
 
-基于验证集（样本数：57-58）的模型性能指标如下：
+基于验证集（样本数：306）的模型性能指标如下：
 
 | 预测目标 | 真实值列 | 预测值列 | 样本数 | MAE     | MAPE (%) | R²    |
-|---------|----------|----------|-------|---------|----------|-------|
-| 放电能量 | discharge_energy_ground_truth | discharge_energy_pred | 57 | 1483.73 | 0.37% | 0.999 |
-| 放电容量 | discharge_capacity_ground_truth | discharge_capacity_pred | 57 | 1.50    | 0.45% | 0.985 |
-| 车辆DCR | vehicle_dcr_ground_truth | vehicle_dcr_pred | 58 | 0.0027  | 2.83% | 0.923 |
-| 电压差14 | volt_range_14_ground_truth | volt_range_14_pred | 57 | 0.0125  | 7.67% | 0.768 |
-| 电压差15 | volt_range_15_ground_truth | volt_range_15_pred | 57 | 0.0126  | 13.95% | 0.698 |
+|---------|----------|----------|-----|---------|----------|-------|
+| 放电能量 | discharge_energy_ground_truth | discharge_energy_pred | 306 | 1974.24 | 0.45%    | 0.992 |
+| 放电容量 | discharge_capacity_ground_truth | discharge_capacity_pred | 306 | 1.72    | 0.51%    | 0.985 |
+| 车辆DCR | vehicle_dcr_ground_truth | vehicle_dcr_pred | 306 | 0.0068  | 2.76%    | 0.923 |
+| 电压差14 | volt_range_14_ground_truth | volt_range_14_pred | 306 | 0.0137  | 8.36%    | 0.728 |
+| 电压差15 | volt_range_15_ground_truth | volt_range_15_pred | 306 | 0.0141  | 14.48%   | 0.698 |
 
 **指标说明：**
 - **MAE (Mean Absolute Error)**：平均绝对误差，越小越好
